@@ -5,7 +5,7 @@ Aplicación Android desarrollada con **Kotlin** y **Jetpack Compose** para la as
 **Autor:** Lizeth Paola Zuluaga
 **Asignatura:** Desarrollo de Aplicativos Móviles
 **Repositorio:** https://github.com/lizzuluaga/EmpresaMensajeria
-**Video demostrativo:** [Pega aquí el enlace del video]
+**Video demostrativo:** [[Pega aquí el enlace del video]](https://youtu.be/ZMrfp8OwSaI?si=ILkrC_KvwbOnSn6_)
 
 ---
 
