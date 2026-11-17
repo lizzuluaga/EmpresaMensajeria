@@ -2,6 +2,8 @@ package com.example.empresamensajeria.ui.screens
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -25,52 +27,48 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
-import com.example.empresamensajeria.data.Envio
-import com.example.empresamensajeria.data.buscarEnvio
-import com.example.empresamensajeria.data.guiaValida
-import com.example.empresamensajeria.data.listaEnvios
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.lifecycle.viewmodel.compose.viewModel
+import com.example.empresamensajeria.data.local.entity.EstadoEnvio
+import com.example.empresamensajeria.data.local.relation.EnvioConMovimientos
 import com.example.empresamensajeria.ui.components.BarraSuperior
 import com.example.empresamensajeria.ui.components.EtiquetaEstado
 import com.example.empresamensajeria.ui.components.LineaTiempo
 import com.example.empresamensajeria.ui.components.ProgresoEnvio
 import com.example.empresamensajeria.ui.components.SeccionTitulo
+import com.example.empresamensajeria.ui.components.formatearFechaHora
+import com.example.empresamensajeria.ui.viewmodel.RastrearViewModel
+import com.example.empresamensajeria.ui.viewmodel.ResultadoRastreo
 import kotlinx.coroutines.delay
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
-fun RastrearScreen(onMenuClick: () -> Unit) {
-    var guia by remember { mutableStateOf("") }
-    var envio by remember { mutableStateOf<Envio?>(null) }
-    var error by remember { mutableStateOf<String?>(null) }
+fun RastrearScreen(
+    onMenuClick: () -> Unit,
+    viewModel: RastrearViewModel = viewModel(factory = RastrearViewModel.Factory)
+) {
+    val estado by viewModel.uiState.collectAsStateWithLifecycle()
+    val resultado = estado.resultado
     val estadoScroll = rememberScrollState()
 
-    // Al aparecer el resultado, baja hasta él
-    LaunchedEffect(envio) {
-        if (envio != null) {
+    // Al aparecer el resultado, baja hasta él (solo cuando cambia la guía encontrada,
+    // no cada vez que Room actualiza el mismo envío)
+    val guiaEncontrada = (resultado as? ResultadoRastreo.Encontrado)?.envio?.envio?.guia
+    LaunchedEffect(guiaEncontrada) {
+        if (guiaEncontrada != null) {
             delay(150)
             estadoScroll.animateScrollTo(estadoScroll.maxValue)
         }
     }
 
-    fun buscar(texto: String) {
-        val encontrado = buscarEnvio(texto)
-        envio = encontrado
-        error = if (encontrado == null) {
-            "No encontramos un envío con la guía ${texto.trim()}"
-        } else {
-            null
-        }
+    val error = (resultado as? ResultadoRastreo.NoEncontrado)?.let {
+        "No encontramos un envío con la guía ${it.guia}"
     }
-
-    val formatoIncorrecto = guia.isNotEmpty() && !guiaValida(guia)
 
     Scaffold(
         topBar = {
@@ -99,19 +97,15 @@ fun RastrearScreen(onMenuClick: () -> Unit) {
             }
 
             OutlinedTextField(
-                value = guia,
-                onValueChange = { entrada ->
-                    guia = entrada.filter { it.isLetterOrDigit() }.take(6).uppercase()
-                    envio = null
-                    error = null
-                },
+                value = estado.guia,
+                onValueChange = viewModel::onGuiaChange,
                 label = { Text("Número de guía") },
                 singleLine = true,
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Ascii),
-                isError = error != null || formatoIncorrecto,
+                isError = error != null || estado.formatoIncorrecto,
                 supportingText = {
                     Text(
-                        error ?: if (formatoIncorrecto) {
+                        error ?: if (estado.formatoIncorrecto) {
                             "Formato: EY y cuatro números, por ejemplo EY1001"
                         } else {
                             "Formato: EY y cuatro números"
@@ -127,22 +121,19 @@ fun RastrearScreen(onMenuClick: () -> Unit) {
                     text = "Guías de ejemplo",
                     style = MaterialTheme.typography.labelMedium
                 )
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    for (ejemplo in listaEnvios.take(3)) {
+                FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    for (ejemplo in viewModel.guiasEjemplo) {
                         AssistChip(
-                            onClick = {
-                                guia = ejemplo.guia
-                                buscar(ejemplo.guia)
-                            },
-                            label = { Text(ejemplo.guia) }
+                            onClick = { viewModel.buscarEjemplo(ejemplo) },
+                            label = { Text(ejemplo) }
                         )
                     }
                 }
             }
 
             Button(
-                onClick = { buscar(guia) },
-                enabled = guiaValida(guia),
+                onClick = viewModel::buscar,
+                enabled = estado.guiaValida,
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(50.dp)
@@ -150,7 +141,9 @@ fun RastrearScreen(onMenuClick: () -> Unit) {
                 Text("Buscar envío")
             }
 
-            envio?.let { ResultadoRastreo(it) }
+            if (resultado is ResultadoRastreo.Encontrado) {
+                ResultadoRastreo(resultado.envio)
+            }
 
             Spacer(modifier = Modifier.height(8.dp))
         }
@@ -158,7 +151,11 @@ fun RastrearScreen(onMenuClick: () -> Unit) {
 }
 
 @Composable
-private fun ResultadoRastreo(envio: Envio) {
+private fun ResultadoRastreo(datos: EnvioConMovimientos) {
+    val envio = datos.envio
+    // Los movimientos llegan del más reciente al más antiguo
+    val ultimaFecha = datos.movimientos.firstOrNull()?.fecha ?: envio.fecha
+
     Card(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(20.dp),
@@ -202,7 +199,11 @@ private fun ResultadoRastreo(envio: Envio) {
                 style = MaterialTheme.typography.bodyLarge
             )
             Text(
-                text = envio.entrega,
+                text = if (envio.estado == EstadoEnvio.ENTREGADO) {
+                    "Entregado el ${formatearFechaHora(ultimaFecha)}"
+                } else {
+                    "Última actualización: ${formatearFechaHora(ultimaFecha)}"
+                },
                 style = MaterialTheme.typography.bodySmall
             )
 
@@ -214,7 +215,7 @@ private fun ResultadoRastreo(envio: Envio) {
 
             SeccionTitulo("Historial")
             Spacer(modifier = Modifier.height(12.dp))
-            LineaTiempo(eventos = envio.eventos)
+            LineaTiempo(eventos = datos.movimientos)
         }
     }
 }

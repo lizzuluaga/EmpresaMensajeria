@@ -19,11 +19,20 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import com.example.empresamensajeria.data.EventoRastreo
+import com.example.empresamensajeria.data.local.entity.Movimiento
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 
+private val formatoFechaHora = SimpleDateFormat("d MMM · h:mm a", Locale.forLanguageTag("es-CO"))
+
+/** Fecha en milisegundos con el formato de la línea de tiempo, por ejemplo "20 oct · 3:40 p. m." */
+fun formatearFechaHora(milisegundos: Long): String = formatoFechaHora.format(Date(milisegundos))
+
+/** Movimientos ordenados del más reciente al más antiguo. */
 @Composable
 fun LineaTiempo(
-    eventos: List<EventoRastreo>,
+    eventos: List<Movimiento>,
     modifier: Modifier = Modifier
 ) {
     val colorPrincipal = MaterialTheme.colorScheme.primary
@@ -71,11 +80,11 @@ fun LineaTiempo(
                         fontWeight = if (esReciente) FontWeight.Bold else FontWeight.Normal
                     )
                     Text(
-                        text = evento.lugar,
+                        text = evento.ubicacion,
                         style = MaterialTheme.typography.bodySmall
                     )
                     Text(
-                        text = evento.fecha,
+                        text = formatearFechaHora(evento.fecha),
                         style = MaterialTheme.typography.labelSmall,
                         color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
                     )

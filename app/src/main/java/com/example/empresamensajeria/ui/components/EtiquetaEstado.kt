@@ -11,13 +11,15 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import com.example.empresamensajeria.data.EstadoEnvio
+import com.example.empresamensajeria.data.local.entity.EstadoEnvio
 
 @Composable
 fun colorEstado(estado: EstadoEnvio): Color = when (estado) {
-    EstadoEnvio.RECIBIDO -> MaterialTheme.colorScheme.outline
-    EstadoEnvio.EN_BODEGA -> MaterialTheme.colorScheme.secondary
-    EstadoEnvio.EN_CAMINO -> MaterialTheme.colorScheme.primary
+    // Gris: todavía no se ha recibido el paquete
+    EstadoEnvio.PENDIENTE -> MaterialTheme.colorScheme.outline
+    EstadoEnvio.RECIBIDO -> MaterialTheme.colorScheme.secondary
+    EstadoEnvio.EN_TRANSITO -> MaterialTheme.colorScheme.primary
+    EstadoEnvio.EN_REPARTO -> Color(0xFF00897B)
     EstadoEnvio.ENTREGADO -> Color(0xFF43A047)
 }
 

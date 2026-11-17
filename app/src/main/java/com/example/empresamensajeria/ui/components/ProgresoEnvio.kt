@@ -18,15 +18,16 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
-import com.example.empresamensajeria.data.EstadoEnvio
+import com.example.empresamensajeria.data.local.entity.EstadoEnvio
 
 @Composable
 fun ProgresoEnvio(
     estadoActual: EstadoEnvio,
     modifier: Modifier = Modifier
 ) {
-    val pasos = EstadoEnvio.entries
-    val actual = estadoActual.ordinal
+    // PENDIENTE no es un paso de la barra: va antes del primero (actual = -1, nada marcado)
+    val pasos = EstadoEnvio.entries.filter { it != EstadoEnvio.PENDIENTE }
+    val actual = pasos.indexOf(estadoActual)
     val colorActivo = colorEstado(estadoActual)
     val colorInactivo = MaterialTheme.colorScheme.outlineVariant
 
