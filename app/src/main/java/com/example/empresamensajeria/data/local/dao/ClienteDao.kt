@@ -42,4 +42,13 @@ interface ClienteDao {
     @Transaction
     @Query("SELECT * FROM clientes WHERE documento = :documento")
     fun observarClienteConContratos(documento: String): Flow<ClienteConContratos?>
+
+    // Panel admin: todos los clientes con sus contratos
+    @Transaction
+    @Query("SELECT * FROM clientes ORDER BY nombre COLLATE NOCASE")
+    fun observarClientesConContratos(): Flow<List<ClienteConContratos>>
+
+    // Restablecer cuenta: el cliente vuelve a quedar habilitado sin contraseña
+    @Query("UPDATE clientes SET contrasena = NULL WHERE documento = :documento")
+    suspend fun borrarContrasena(documento: String)
 }

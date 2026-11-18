@@ -61,11 +61,28 @@ import com.example.empresamensajeria.ui.components.SeccionTitulo
 import com.example.empresamensajeria.ui.components.SelectorDesplegable
 import com.example.empresamensajeria.ui.components.TarjetaResultado
 import com.example.empresamensajeria.ui.components.TarjetaSeleccion
+import com.example.empresamensajeria.ui.viewmodel.ContratoBodegaViewModel
+import com.example.empresamensajeria.ui.viewmodel.SolicitudEnvioViewModel
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.lifecycle.viewmodel.compose.viewModel
 import kotlinx.coroutines.delay
 
 @Composable
-fun CotizarScreen(servicioId: Int, onMenuClick: () -> Unit) {
+fun CotizarScreen(
+    servicioId: Int,
+    onMenuClick: () -> Unit,
+    onRastrearGuia: (String) -> Unit = {},
+    onIrALogin: () -> Unit = {},
+    // Documento del cliente con sesión iniciada (null si no hay sesión o es el admin)
+    documentoSesionCliente: String? = null,
+    solicitudViewModel: SolicitudEnvioViewModel = viewModel(factory = SolicitudEnvioViewModel.Factory),
+    contratoViewModel: ContratoBodegaViewModel = viewModel(factory = ContratoBodegaViewModel.Factory)
+) {
     val servicio = listaServicios.find { it.id == servicioId } ?: listaServicios.first()
+    val solicitud by solicitudViewModel.uiState.collectAsStateWithLifecycle()
+    var mostrarSolicitud by remember { mutableStateOf(false) }
+    val contrato by contratoViewModel.uiState.collectAsStateWithLifecycle()
+    var mostrarContrato by remember { mutableStateOf(false) }
     val nombresCiudades = remember { listaCiudades.map { it.nombre } }
     val nombresPaises = remember { listaPaises.map { it.nombre } }
 
@@ -477,8 +494,120 @@ fun CotizarScreen(servicioId: Int, onMenuClick: () -> Unit) {
             // Tarjeta con el desglose (solo aparece después de calcular)
             resultado?.let { TarjetaResultado(resultado = it) }
 
+            // Solicitar envío: solo en los modos que envían algo y con la tarifa ya calculada
+            if (esEnvio && resultado != null) {
+                Button(
+                    onClick = { mostrarSolicitud = true },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(50.dp)
+                ) {
+                    Text("Solicitar envío")
+                }
+            }
+
+            // Contratar servicio: solo en el modo bodega y con la tarifa ya calculada
+            if (!esEnvio && resultado != null) {
+                Button(
+                    onClick = {
+                        // Con sesión de cliente, el formulario se abre con sus datos
+                        documentoSesionCliente?.let(contratoViewModel::prellenarConCliente)
+                        mostrarContrato = true
+                    },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(50.dp)
+                ) {
+                    Text("Contratar servicio")
+                }
+            }
+
             Spacer(modifier = Modifier.height(8.dp))
         }
+    }
+
+    // En el modo local el envío se hace dentro de la misma ciudad
+    val destinoSolicitud = if (servicio.modo == ModoCotizacion.LOCAL) origen else destino
+    val resultadoActual = resultado
+
+    if (mostrarSolicitud && resultadoActual != null) {
+        HojaSolicitudEnvio(
+            estado = solicitud,
+            resumen = ResumenSolicitud(
+                servicio = servicio.titulo,
+                origen = origen,
+                destino = destinoSolicitud,
+                peso = peso,
+                total = resultadoActual.total
+            ),
+            onRemitenteChange = solicitudViewModel::onRemitenteChange,
+            onTelefonoRemitenteChange = solicitudViewModel::onTelefonoRemitenteChange,
+            onDestinatarioChange = solicitudViewModel::onDestinatarioChange,
+            onTelefonoDestinatarioChange = solicitudViewModel::onTelefonoDestinatarioChange,
+            onDireccionChange = solicitudViewModel::onDireccionChange,
+            onConfirmar = {
+                solicitudViewModel.solicitar(
+                    origen = origen,
+                    destino = destinoSolicitud,
+                    servicio = servicio.titulo,
+                    peso = pesoIngresado ?: 0.0,
+                    valor = resultadoActual.total
+                )
+            },
+            onCerrar = { mostrarSolicitud = false }
+        )
+    }
+
+    // Confirmación con la guía generada (se muestra cuando el sheet ya se cerró)
+    val guiaGenerada = solicitud.guiaGenerada
+    if (guiaGenerada != null && !mostrarSolicitud) {
+        DialogoGuiaRegistrada(
+            guia = guiaGenerada,
+            onRastrear = {
+                solicitudViewModel.limpiar()
+                onRastrearGuia(guiaGenerada)
+            },
+            onCerrar = solicitudViewModel::limpiar
+        )
+    }
+
+    val espacioActual = espacio
+    if (mostrarContrato && resultadoActual != null && espacioActual != null) {
+        HojaContratoBodega(
+            estado = contrato,
+            resumen = ResumenContrato(
+                espacio = espacioActual.nombre,
+                medidas = espacioActual.medidas,
+                dias = dias,
+                total = resultadoActual.total
+            ),
+            onDocumentoChange = contratoViewModel::onDocumentoChange,
+            onNombreChange = contratoViewModel::onNombreChange,
+            onTelefonoChange = contratoViewModel::onTelefonoChange,
+            onConfirmar = {
+                contratoViewModel.contratar(
+                    espacio = espacioActual.nombre,
+                    dias = dias,
+                    valor = resultadoActual.total
+                )
+            },
+            onCerrar = { mostrarContrato = false }
+        )
+    }
+
+    // Confirmación de la contratación (se muestra cuando el sheet ya se cerró)
+    val resultadoContrato = contrato.resultado
+    if (resultadoContrato != null && !mostrarContrato) {
+        DialogoServicioContratado(
+            resultado = resultadoContrato,
+            conSesionDelCliente = documentoSesionCliente != null &&
+                contrato.documento == documentoSesionCliente,
+            onIrALogin = {
+                contratoViewModel.limpiar()
+                onIrALogin()
+            },
+            onCerrar = contratoViewModel::limpiar
+        )
     }
 }
 

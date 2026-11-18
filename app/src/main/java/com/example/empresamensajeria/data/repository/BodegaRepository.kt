@@ -21,6 +21,18 @@ sealed class ResultadoRegistro {
     object Exito : ResultadoRegistro()
 }
 
+/** Situación del cliente al contratar un servicio de bodega (en los tres casos se crea el contrato). */
+sealed class ResultadoContrato {
+    // Se creó el cliente, todavía sin cuenta
+    object ClienteNuevo : ResultadoContrato()
+
+    // Ya existía pero aún no se ha registrado
+    object ClienteSinCuenta : ResultadoContrato()
+
+    // Ya existía y ya tiene contraseña
+    object ClienteConCuenta : ResultadoContrato()
+}
+
 /**
  * Clientes, contratos de bodega y artículos.
  * Todas las funciones suspend usan los DAOs de Room, que ya se ejecutan fuera del hilo principal.
@@ -33,6 +45,10 @@ class BodegaRepository(private val db: EnviaYaDatabase) {
 
     // ---------- Contratar y cuenta del cliente ----------
 
+    /**
+     * Crea o reutiliza el cliente por documento (sin cambiar sus datos si ya existía)
+     * y le crea un ContratoBodega ACTIVO. El resultado indica en qué situación estaba el cliente.
+     */
     suspend fun contratarServicio(
         documento: String,
         nombre: String,
@@ -40,10 +56,19 @@ class BodegaRepository(private val db: EnviaYaDatabase) {
         espacio: String,
         dias: Int,
         valor: Int
-    ): Long = db.withTransaction {
+    ): ResultadoContrato = db.withTransaction {
         val doc = documento.trim()
-        // IGNORE: si el cliente ya existe se reutiliza sin cambiar sus datos
-        clienteDao.insertar(Cliente(documento = doc, nombre = nombre.trim(), telefono = telefono.trim()))
+        val existente = clienteDao.buscarPorDocumento(doc)
+        val resultado = when {
+            existente == null -> {
+                clienteDao.insertar(
+                    Cliente(documento = doc, nombre = nombre.trim(), telefono = telefono.trim())
+                )
+                ResultadoContrato.ClienteNuevo
+            }
+            existente.contrasena == null -> ResultadoContrato.ClienteSinCuenta
+            else -> ResultadoContrato.ClienteConCuenta
+        }
         contratoDao.insertar(
             ContratoBodega(
                 documentoCliente = doc,
@@ -54,6 +79,7 @@ class BodegaRepository(private val db: EnviaYaDatabase) {
                 estado = EstadoContrato.ACTIVO
             )
         )
+        resultado
     }
 
     suspend fun registrarCuenta(documento: String, contrasena: String): ResultadoRegistro =
@@ -93,7 +119,13 @@ class BodegaRepository(private val db: EnviaYaDatabase) {
     fun observarClienteConContratos(documento: String): Flow<ClienteConContratos?> =
         clienteDao.observarClienteConContratos(documento)
 
+    fun observarClientesConContratos(): Flow<List<ClienteConContratos>> =
+        clienteDao.observarClientesConContratos()
+
     suspend fun editarCliente(cliente: Cliente) = clienteDao.actualizar(cliente)
+
+    /** Borra la contraseña: el cliente deberá registrarse de nuevo con su documento. */
+    suspend fun restablecerCuenta(documento: String) = clienteDao.borrarContrasena(documento)
 
     // Borra también sus contratos y artículos (CASCADE)
     suspend fun eliminarCliente(cliente: Cliente) = clienteDao.eliminar(cliente)

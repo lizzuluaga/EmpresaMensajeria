@@ -1,6 +1,8 @@
 package com.example.empresamensajeria.ui.viewmodel
 
+import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
+import androidx.lifecycle.createSavedStateHandle
 import androidx.lifecycle.ViewModelProvider.AndroidViewModelFactory.Companion.APPLICATION_KEY
 import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.initializer
@@ -8,6 +10,7 @@ import androidx.lifecycle.viewmodel.viewModelFactory
 import com.example.empresamensajeria.EnviaYaApplication
 import com.example.empresamensajeria.data.local.relation.EnvioConMovimientos
 import com.example.empresamensajeria.data.repository.EnvioRepository
+import com.example.empresamensajeria.navigation.Rutas
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -35,7 +38,10 @@ data class RastrearUiState(
 private val FORMATO_GUIA = Regex("^EY\\d{4}$")
 
 @OptIn(ExperimentalCoroutinesApi::class)
-class RastrearViewModel(private val repository: EnvioRepository) : ViewModel() {
+class RastrearViewModel(
+    private val repository: EnvioRepository,
+    savedStateHandle: SavedStateHandle
+) : ViewModel() {
 
     val guiasEjemplo = listOf("EY1001", "EY1002", "EY1003", "EY1004", "EY1005")
 
@@ -65,6 +71,12 @@ class RastrearViewModel(private val repository: EnvioRepository) : ViewModel() {
         initialValue = RastrearUiState()
     )
 
+    init {
+        // Si se llegó con una guía en la ruta (por ejemplo desde "Rastrear ahora"), se busca de una vez
+        val guiaInicial = savedStateHandle.get<String>(Rutas.ARG_GUIA).orEmpty().trim().uppercase()
+        if (FORMATO_GUIA.matches(guiaInicial)) buscarEjemplo(guiaInicial)
+    }
+
     fun onGuiaChange(entrada: String) {
         guia.value = entrada.filter { it.isLetterOrDigit() }.take(6).uppercase()
         // Al editar la guía se limpia el resultado anterior
@@ -85,7 +97,7 @@ class RastrearViewModel(private val repository: EnvioRepository) : ViewModel() {
         val Factory = viewModelFactory {
             initializer {
                 val app = this[APPLICATION_KEY] as EnviaYaApplication
-                RastrearViewModel(app.envioRepository)
+                RastrearViewModel(app.envioRepository, createSavedStateHandle())
             }
         }
     }
